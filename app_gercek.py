@@ -354,7 +354,7 @@ if "canli_olaylar" not in st.session_state:
     st.session_state.canli_olaylar = []
 
 
-@st.fragment(run_every="300s")
+
 def harita_paneli():
     if len(map_df):
         point_layer = pdk.Layer(
