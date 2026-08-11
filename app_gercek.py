@@ -441,8 +441,7 @@ def harita_paneli():
                 "style": {"backgroundColor": "#1a1a1a", "color": "#ffc600"},
             }
             st.pydeck_chart(pdk.Deck(
-                layers=[heat_layer, point_layer, canli_layer], initial_view_state=view_state, tooltip=tooltip,
-                map_provider="carto",
+                layers=[heat_layer, point_layer, canli_layer], initial_view_state=view_state, tooltip=tooltip
             ))
             legend_html = ""
             for cat, color in RISK_COLORS.items():
