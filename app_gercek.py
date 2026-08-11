@@ -356,134 +356,138 @@ if "canli_olaylar" not in st.session_state:
 
 
 def harita_paneli():
-    if len(map_df):
-        point_layer = pdk.Layer(
-            "ScatterplotLayer", data=map_df, get_position="[lon, lat]",
-            get_fill_color="color", get_radius=25, radius_min_pixels=2, radius_max_pixels=4,
-            pickable=True, opacity=0.85,
-        )
-
-        # YOGUNLUK KATMANI: nokta yogunlugu (heatmap) dogrudan sol menudeki
-        # gercek arıza sayisiyla orantili. Genis yaricap (radius_pixels) kullanilir
-        # ki noktalar tek tek "yildiz/cicek" gibi degil, birbirine karisan
-        # pürüzsüz bir bulut olarak gorunsun.
-        ilce_ariza_sayisi = outages_raw[outages_raw["ilce"].isin(map_df["ilce"].unique())].groupby("ilce").size()
-        ilce_varlik_sayisi = map_df.groupby("ilce").size()
-        heat_df = map_df.copy()
-        heat_df["weight"] = heat_df["ilce"].map(
-            lambda i: ilce_ariza_sayisi.get(i, 0) / max(ilce_varlik_sayisi.get(i, 1), 1)
-        )
-        heat_layer = pdk.Layer(
-            "HeatmapLayer", data=heat_df, get_position="[lon, lat]", get_weight="weight",
-            radius_pixels=55, intensity=1.0, threshold=0.02, aggregation="MEAN",
-            color_range=[
-                [237, 248, 233, 40], [186, 228, 179, 90], [116, 196, 118, 140],
-                [49, 163, 84, 190], [0, 109, 44, 225], [0, 68, 27, 255],
-            ],
-        )
-
-        # CANLI VERI: her 5 dakikada bir yeni "simule" arıza olayı üretilir ve
-        # haritada ayırt edici (mor halka) bir katman olarak gösterilir
-        weights = (asset_risk_df["risk_score"] + 1)
-        weights = weights / weights.sum()
-        yeni_olay = asset_risk_df.sample(1, weights=weights).iloc[0]
-        st.session_state.canli_olaylar.insert(0, {
-            "saat": datetime.now().strftime("%H:%M:%S"),
-            "pole_id": yeni_olay["pole_id"], "ilce": yeni_olay["ilce"],
-            "lat": yeni_olay["lat"], "lon": yeni_olay["lon"],
-            "risk_score": yeni_olay["risk_score"],
-        })
-        st.session_state.canli_olaylar = st.session_state.canli_olaylar[:8]
-
-        canli_df = pd.DataFrame(st.session_state.canli_olaylar)
-        canli_layer = pdk.Layer(
-            "ScatterplotLayer", data=canli_df, get_position="[lon, lat]",
-            get_fill_color=[190, 40, 220], get_line_color=[255, 255, 255],
-            get_radius=90, line_width_min_pixels=2, stroked=True,
-            pickable=True, opacity=0.55,
-        )
-
-        view_state = pdk.ViewState(
-            latitude=map_df["lat"].mean(), longitude=map_df["lon"].mean(), zoom=8.5,
-        )
-        tooltip = {
-            "html": "<b>{pole_id}</b><br/>İlçe: {ilce}<br/>Risk: {risk_score} ({risk_category})<br/>Baskın neden: {dominant_cause}",
-            "style": {"backgroundColor": "#1a1a1a", "color": "#ffc600"},
-        }
-        st.pydeck_chart(pdk.Deck(
-            layers=[heat_layer, point_layer, canli_layer], initial_view_state=view_state, tooltip=tooltip,
-            map_provider="carto", map_style="light",
-        ))
-        legend_html = ""
-        for cat, color in RISK_COLORS.items():
-            legend_html += f"<span style='margin-right: 15px;'><span style='color:rgb({color[0]},{color[1]},{color[2]});'>●</span> {cat}</span>"
-        legend_html += "<span><span style='color:rgb(190,40,220)'>◉</span> Canlı olay</span>"
-        st.markdown(f"<div style='display:flex; flex-wrap:wrap; margin-bottom:10px;'>{legend_html}</div>", unsafe_allow_html=True)
-
-        st.caption(
-            f"🟣 Son canlı olay: {st.session_state.canli_olaylar[0]['saat']} — "
-            f"{st.session_state.canli_olaylar[0]['pole_id']} ({st.session_state.canli_olaylar[0]['ilce']}) — "
-            "gerçek SCADA bağlantısı yerine simüle edilmiştir, 5 dakikada bir yenilenir."
-        )
-
-        st.markdown("**🔴 Canlı Arıza Uyarı Akışı**")
-
-        if "canli_fotolar" not in st.session_state:
-            st.session_state.canli_fotolar = {}
-
-        for olay in st.session_state.canli_olaylar:
-            olay_id = f"{olay['pole_id']}_{olay['saat']}"
+    try:
+        if len(map_df):
+            # Bulut sunucuda WebSocket veya Hafıza sınırına (OOM) takılmamak için sadece gereken kolonları alıyoruz
+            render_df = map_df[["pole_id", "ilce", "lat", "lon", "color", "risk_score", "risk_category", "dominant_cause"]].copy()
             
-            with st.container(border=True):
-                c1, c2 = st.columns([2, 1])
-                
-                with c1:
-                    st.markdown(f"**Saat:** {olay['saat']} &nbsp; | &nbsp; **İlçe:** {olay['ilce']}")
-                    st.markdown(f"**Varlık:** {olay['pole_id']} &nbsp; | &nbsp; **Risk Skoru:** <span style='color:#ffc600;'>{olay['risk_score']}</span>", unsafe_allow_html=True)
-                
-                with c2:
-                    yuklenen = st.file_uploader(
-                        "Fotoğraf yükle", type=["jpg", "jpeg", "png"], key=f"foto_{olay_id}",
-                        label_visibility="collapsed",
-                    )
-                
-                if yuklenen is not None:
-                    yuklenen.seek(0)
-                    st.session_state.canli_fotolar[olay_id] = yuklenen
+            point_layer = pdk.Layer(
+                "ScatterplotLayer", data=render_df, get_position="[lon, lat]",
+                get_fill_color="color", get_radius=25, radius_min_pixels=2, radius_max_pixels=4,
+                pickable=True, opacity=0.85,
+            )
 
-                if olay_id in st.session_state.canli_fotolar:
-                    foto = st.session_state.canli_fotolar[olay_id]
+            # YOGUNLUK KATMANI
+            ilce_ariza_sayisi = outages_raw[outages_raw["ilce"].isin(map_df["ilce"].unique())].groupby("ilce").size()
+            ilce_varlik_sayisi = map_df.groupby("ilce").size()
+            heat_df = map_df[["lat", "lon", "ilce"]].copy()
+            heat_df["weight"] = heat_df["ilce"].map(
+                lambda i: ilce_ariza_sayisi.get(i, 0) / max(ilce_varlik_sayisi.get(i, 1), 1)
+            )
+            heat_layer = pdk.Layer(
+                "HeatmapLayer", data=heat_df[["lat", "lon", "weight"]], get_position="[lon, lat]", get_weight="weight",
+                radius_pixels=55, intensity=1.0, threshold=0.02, aggregation="MEAN",
+                color_range=[
+                    [237, 248, 233, 40], [186, 228, 179, 90], [116, 196, 118, 140],
+                    [49, 163, 84, 190], [0, 109, 44, 225], [0, 68, 27, 255],
+                ],
+            )
+
+            # CANLI VERI
+            weights = (asset_risk_df["risk_score"] + 1)
+            weights = weights / weights.sum()
+            yeni_olay = asset_risk_df.sample(1, weights=weights).iloc[0]
+            st.session_state.canli_olaylar.insert(0, {
+                "saat": datetime.now().strftime("%H:%M:%S"),
+                "pole_id": yeni_olay["pole_id"], "ilce": yeni_olay["ilce"],
+                "lat": float(yeni_olay["lat"]), "lon": float(yeni_olay["lon"]),
+                "risk_score": float(yeni_olay["risk_score"]),
+            })
+            st.session_state.canli_olaylar = st.session_state.canli_olaylar[:8]
+
+            canli_df = pd.DataFrame(st.session_state.canli_olaylar)
+            canli_layer = pdk.Layer(
+                "ScatterplotLayer", data=canli_df, get_position="[lon, lat]",
+                get_fill_color=[190, 40, 220], get_line_color=[255, 255, 255],
+                get_radius=90, line_width_min_pixels=2, stroked=True,
+                pickable=True, opacity=0.55,
+            )
+
+            view_state = pdk.ViewState(
+                latitude=float(map_df["lat"].mean()), longitude=float(map_df["lon"].mean()), zoom=8.5,
+            )
+            tooltip = {
+                "html": "<b>{pole_id}</b><br/>İlçe: {ilce}<br/>Risk: {risk_score} ({risk_category})<br/>Baskın neden: {dominant_cause}",
+                "style": {"backgroundColor": "#1a1a1a", "color": "#ffc600"},
+            }
+            st.pydeck_chart(pdk.Deck(
+                layers=[heat_layer, point_layer, canli_layer], initial_view_state=view_state, tooltip=tooltip,
+                map_provider="carto", map_style="light",
+            ))
+            legend_html = ""
+            for cat, color in RISK_COLORS.items():
+                legend_html += f"<span style='margin-right: 15px;'><span style='color:rgb({color[0]},{color[1]},{color[2]});'>●</span> {cat}</span>"
+            legend_html += "<span><span style='color:rgb(190,40,220)'>◉</span> Canlı olay</span>"
+            st.markdown(f"<div style='display:flex; flex-wrap:wrap; margin-bottom:10px;'>{legend_html}</div>", unsafe_allow_html=True)
+
+            st.caption(
+                f"🟣 Son canlı olay: {st.session_state.canli_olaylar[0]['saat']} — "
+                f"{st.session_state.canli_olaylar[0]['pole_id']} ({st.session_state.canli_olaylar[0]['ilce']}) — "
+                "gerçek SCADA bağlantısı yerine simüle edilmiştir, 5 dakikada bir yenilenir."
+            )
+
+            st.markdown("**🔴 Canlı Arıza Uyarı Akışı**")
+
+            if "canli_fotolar" not in st.session_state:
+                st.session_state.canli_fotolar = {}
+
+            for olay in st.session_state.canli_olaylar:
+                olay_id = f"{olay['pole_id']}_{olay['saat']}"
+                
+                with st.container(border=True):
+                    c1, c2 = st.columns([2, 1])
                     
-                    if YOLO_VAR:
-                        model = load_yolo_model()
-                        if model is not None:
-                            try:
-                                foto.seek(0)
-                                image = Image.open(foto)
-                                results = model(image)
-                                res = results[0]
-                                res_plotted = res.plot()
-                                res_rgb = res_plotted[..., ::-1]
-                                
-                                st.image(res_rgb, width=350)
-                                
-                                if len(res.boxes) > 0:
-                                    detected_classes = [res.names[int(cls)] for cls in res.boxes.cls]
-                                    unique_classes = list(set(detected_classes))
-                                    st.markdown("**Tespit Edilen Problemler:**")
-                                    for u_cls in unique_classes:
-                                        st.error(f"⚠️ {u_cls}")
-                                else:
-                                    st.success("✅ Model fotoğrafta bir arıza/sorun tespit etmedi.")
-                            except Exception as e:
-                                st.error("Görüntü işlenemedi.")
+                    with c1:
+                        st.markdown(f"**Saat:** {olay['saat']} &nbsp; | &nbsp; **İlçe:** {olay['ilce']}")
+                        st.markdown(f"**Varlık:** {olay['pole_id']} &nbsp; | &nbsp; **Risk Skoru:** <span style='color:#ffc600;'>{olay['risk_score']}</span>", unsafe_allow_html=True)
+                    
+                    with c2:
+                        yuklenen = st.file_uploader(
+                            "Fotoğraf yükle", type=["jpg", "jpeg", "png"], key=f"foto_{olay_id}",
+                            label_visibility="collapsed",
+                        )
+                    
+                    if yuklenen is not None:
+                        yuklenen.seek(0)
+                        st.session_state.canli_fotolar[olay_id] = yuklenen
+
+                    if olay_id in st.session_state.canli_fotolar:
+                        foto = st.session_state.canli_fotolar[olay_id]
+                        
+                        if YOLO_VAR:
+                            model = load_yolo_model()
+                            if model is not None:
+                                try:
+                                    foto.seek(0)
+                                    image = Image.open(foto)
+                                    results = model(image)
+                                    res = results[0]
+                                    res_plotted = res.plot()
+                                    res_rgb = res_plotted[..., ::-1]
+                                    
+                                    st.image(res_rgb, width=350)
+                                    
+                                    if len(res.boxes) > 0:
+                                        detected_classes = [res.names[int(cls)] for cls in res.boxes.cls]
+                                        unique_classes = list(set(detected_classes))
+                                        st.markdown("**Tespit Edilen Problemler:**")
+                                        for u_cls in unique_classes:
+                                            st.error(f"⚠️ {u_cls}")
+                                    else:
+                                        st.success("✅ Model fotoğrafta bir arıza/sorun tespit etmedi.")
+                                except Exception as e:
+                                    st.error("Görüntü işlenemedi.")
+                                    st.image(foto, width=150)
+                            else:
                                 st.image(foto, width=150)
                         else:
                             st.image(foto, width=150)
-                    else:
-                        st.image(foto, width=150)
-    else:
-        st.info("Seçili filtrelerle gösterilecek varlık yok.")
+        else:
+            st.info("Seçili filtrelerle gösterilecek varlık yok.")
+    except Exception as e:
+        import traceback
+        st.error(f"Harita veya tablo yüklenirken bir hata oluştu: {str(e)}")
+        st.code(traceback.format_exc())
 
 
 harita_paneli()
