@@ -58,32 +58,48 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    .stApp { background-color: #ffffff; }
-    section[data-testid="stSidebar"] { background-color: #ffffff; border-right: 1px solid #eee0a8; }
-    section[data-testid="stSidebar"] * { color: #1a1a1a !important; }
-    section[data-testid="stSidebar"] h1 { color: #1a1a1a !important; }
-    div[data-testid="stMetric"] {
-        background-color: white; border-radius: 10px; padding: 14px 10px;
-        border: 1px solid #eee0a8; border-left: 4px solid #ffc600;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    /* =========================================
+       TEMA UYUMU (LIGHT & DARK MODE)
+       ========================================= */
+    :root {
+        --enerjisa-sari: #ffc600;
+        --enerjisa-sari-hover: #ffdd55;
+        --text-koyu: #1a1a1a;
+        --text-acik: #f1f1f1;
+        --metric-border-light: #eee0a8;
+        --metric-border-dark: #4a4a4a;
+        --metric-bg-light: #ffffff;
+        --metric-bg-dark: #1e1e1e;
+        --hero-text-light: #4a3d00;
+        --hero-text-dark: #1a1a1a;
     }
-    div[data-testid="stMetric"] label { color: #6b6b6b !important; }
-    h1 { color: #1a1a1a !important; font-weight: 700; }
-    h2, h3 { color: #1a1a1a !important; }
+
+    /* Gündüz (Light) Mod için (Streamlit varsayılanı) */
+    .stApp { background-color: transparent; }
+    
+    div[data-testid="stMetric"] {
+        border-radius: 10px; padding: 14px 10px;
+        border-left: 4px solid var(--enerjisa-sari) !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        background-color: var(--metric-bg-light);
+        border: 1px solid var(--metric-border-light);
+    }
+    
     .hero-banner {
-        background: linear-gradient(90deg, #ffc600 0%, #ffdd55 100%);
+        background: linear-gradient(90deg, var(--enerjisa-sari) 0%, var(--enerjisa-sari-hover) 100%);
         padding: 32px 28px; border-radius: 12px; margin-bottom: 18px;
         display: flex; align-items: center; justify-content: center; gap: 24px;
         text-align: center;
     }
     .hero-logo {
-        background: #1a1a1a; color: #ffc600; font-weight: 800; font-size: 20px;
+        background: #1a1a1a; color: var(--enerjisa-sari); font-weight: 800; font-size: 20px;
         border-radius: 8px; padding: 8px 14px; white-space: nowrap;
     }
     .hero-banner h1 { color: #1a1a1a !important; margin: 0; font-size: 40px; }
-    .hero-banner p { color: #4a3d00; margin: 4px 0 0 0; font-size: 14px; text-align: center; }
+    .hero-banner p { color: var(--hero-text-light); margin: 4px 0 0 0; font-size: 14px; text-align: center; }
+    
     .real-badge {
-        display: inline-block; background: #1a1a1a; color: #ffc600; font-size: 12px;
+        display: inline-block; background: #1a1a1a; color: var(--enerjisa-sari); font-size: 12px;
         font-weight: 700; padding: 3px 10px; border-radius: 20px; margin-left: 10px;
     }
     .stTabs [data-baseweb="tab"] { font-weight: 600; }
@@ -91,14 +107,28 @@ st.markdown("""
 
     /* Multiselect etiketleri (chip) - sari zemin, koyu yazi */
     span[data-baseweb="tag"] {
-        background-color: #ffc600 !important;
+        background-color: var(--enerjisa-sari) !important;
         color: #1a1a1a !important;
         border-radius: 6px !important;
     }
     span[data-baseweb="tag"] svg { fill: #1a1a1a !important; }
-    div[data-baseweb="select"] > div {
-        border-color: #eee0a8 !important;
+
+    /* =========================================
+       KARANLIK MOD (DARK MODE) EZMELERİ
+       ========================================= */
+    @media (prefers-color-scheme: dark) {
+        div[data-testid="stMetric"] {
+            background-color: var(--metric-bg-dark);
+            border: 1px solid var(--metric-border-dark);
+            border-left: 4px solid var(--enerjisa-sari) !important;
+        }
+        .hero-banner p { color: var(--hero-text-dark); }
+        .stTabs [aria-selected="true"] { color: var(--enerjisa-sari) !important; }
+        
+        /* Harita efsane (Legend) yazıları için otomatik uyum */
+        .legend-text { color: var(--text-acik) !important; }
     }
+
 
     /* =========================================
        RESPONSIVE MEDIA QUERIES (MOBILE-FRIENDLY)
@@ -412,12 +442,12 @@ def harita_paneli():
             }
             st.pydeck_chart(pdk.Deck(
                 layers=[heat_layer, point_layer, canli_layer], initial_view_state=view_state, tooltip=tooltip,
-                map_provider="carto", map_style="light",
+                map_provider="carto",
             ))
             legend_html = ""
             for cat, color in RISK_COLORS.items():
-                legend_html += f"<span style='margin-right: 15px;'><span style='color:rgb({color[0]},{color[1]},{color[2]});'>●</span> {cat}</span>"
-            legend_html += "<span><span style='color:rgb(190,40,220)'>◉</span> Canlı olay</span>"
+                legend_html += f"<span class='legend-text' style='margin-right: 15px;'><span style='color:rgb({color[0]},{color[1]},{color[2]});'>●</span> {cat}</span>"
+            legend_html += "<span class='legend-text'><span style='color:rgb(190,40,220)'>◉</span> Canlı olay</span>"
             st.markdown(f"<div style='display:flex; flex-wrap:wrap; margin-bottom:10px;'>{legend_html}</div>", unsafe_allow_html=True)
 
             st.caption(
