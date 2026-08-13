@@ -13,6 +13,7 @@ import pandas as pd
 import numpy as np
 import pydeck as pdk
 import os
+import io
 import base64
 from datetime import datetime
 
@@ -477,19 +478,20 @@ def harita_paneli():
                             label_visibility="collapsed",
                         )
                     
+                    # Fotoğraf yüklendiğinde RAW BYTES olarak session_state'e kaydet
+                    # (UploadedFile objesi rerun sonrası geçersiz hale gelir)
                     if yuklenen is not None:
                         yuklenen.seek(0)
-                        st.session_state.canli_fotolar[olay_id] = yuklenen
+                        st.session_state.canli_fotolar[olay_id] = yuklenen.read()
 
                     if olay_id in st.session_state.canli_fotolar:
-                        foto = st.session_state.canli_fotolar[olay_id]
+                        foto_bytes = st.session_state.canli_fotolar[olay_id]
                         
                         if YOLO_VAR:
                             model = load_yolo_model()
                             if model is not None:
                                 try:
-                                    foto.seek(0)
-                                    image = Image.open(foto)
+                                    image = Image.open(io.BytesIO(foto_bytes))
                                     results = model(image)
                                     res = results[0]
                                     res_plotted = res.plot()
@@ -506,12 +508,13 @@ def harita_paneli():
                                     else:
                                         st.success("✅ Model fotoğrafta bir arıza/sorun tespit etmedi.")
                                 except Exception as e:
-                                    st.error("Görüntü işlenemedi.")
-                                    st.image(foto, width=150)
+                                    st.error(f"Görüntü işlenemedi: {e}")
+                                    st.image(io.BytesIO(foto_bytes), width=150)
                             else:
-                                st.image(foto, width=150)
+                                st.warning("⚠️ YOLO modeli yüklenemedi. 'assets/best.pt' dosyasını kontrol edin.")
+                                st.image(io.BytesIO(foto_bytes), width=150)
                         else:
-                            st.image(foto, width=150)
+                            st.image(io.BytesIO(foto_bytes), width=150)
         else:
             st.info("Seçili filtrelerle gösterilecek varlık yok.")
     except Exception as e:
