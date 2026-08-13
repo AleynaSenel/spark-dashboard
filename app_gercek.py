@@ -534,14 +534,41 @@ def harita_paneli():
                                     
                                     st.image(res_rgb, width=350)
                                     
+                                    RISK_ARALIKLARI = {
+                                        "SAGLAM": (0.05, 0.20),
+                                        "UCUNCU_SAHIS": (0.40, 0.60),
+                                        "AGAC_TEMASI": (0.40, 0.60),
+                                        "EKIPMAN_YASLANMA": (0.45, 0.65),
+                                        "IZOLATOR_ARIZASI": (0.80, 1.00),
+                                        "HASARLI_IZOLATOR": (0.80, 1.00),
+                                        "KABLO_ARIZASI": (0.85, 1.00),
+                                    }
+                                    
+                                    en_yuksek_kusur = "SAGLAM"
+                                    en_yuksek_guven = 1.00
+                                    en_yuksek_skor = 0.10
+                                    
                                     if len(res.boxes) > 0:
-                                        detected_classes = [res.names[int(cls)] for cls in res.boxes.cls]
-                                        unique_classes = list(set(detected_classes))
-                                        st.markdown("**Tespit Edilen Problemler:**")
-                                        for u_cls in unique_classes:
-                                            st.error(f"⚠️ {u_cls}")
+                                        en_yuksek_skor = 0.0
+                                        for box in res.boxes:
+                                            sinif_adi = res.names[int(box.cls[0])]
+                                            guven = float(box.conf[0])
+                                            alt_sinir, ust_sinir = RISK_ARALIKLARI.get(sinif_adi, (0.40, 0.60))
+                                            hesaplanan_skor = round(alt_sinir + ((ust_sinir - alt_sinir) * guven), 2)
+                                            
+                                            if hesaplanan_skor > en_yuksek_skor:
+                                                en_yuksek_skor = hesaplanan_skor
+                                                en_yuksek_kusur = sinif_adi
+                                                en_yuksek_guven = round(guven, 2)
+                                        
+                                        st.markdown("**Tespit Edilen En Yüksek Risk:**")
+                                        if en_yuksek_kusur == "SAGLAM" or en_yuksek_skor < 0.40:
+                                            st.success(f"✅ **{en_yuksek_kusur}** (Risk Skoru: {en_yuksek_skor} | Güven: {en_yuksek_guven})")
+                                        else:
+                                            st.error(f"⚠️ **{en_yuksek_kusur}** (Risk Skoru: {en_yuksek_skor} | Güven: {en_yuksek_guven})")
                                     else:
-                                        st.success("✅ Model fotoğrafta bir arıza/sorun tespit etmedi.")
+                                        st.markdown("**Tespit Edilen En Yüksek Risk:**")
+                                        st.success(f"✅ **{en_yuksek_kusur}** (Risk Skoru: {en_yuksek_skor} | Güven: {en_yuksek_guven})")
                                 except Exception as e:
                                     st.error(f"Görüntü işlenemedi: {e}")
                                     st.image(io.BytesIO(foto_bytes), width=150)
