@@ -35,21 +35,22 @@ except ImportError:
     GORSEL_TESPIT_VAR = False
 
 try:
-    # pyrefly: ignore [missing-import]
     from ultralytics import YOLO
     from PIL import Image
     YOLO_VAR = True
-except ImportError:
+    YOLO_IMPORT_ERROR = None
+except Exception as e:
     YOLO_VAR = False
+    YOLO_IMPORT_ERROR = str(e)
 
 @st.cache_resource
 def load_yolo_model():
     if YOLO_VAR:
         try:
-            return YOLO("assets/best.pt")
+            return YOLO("assets/best.pt"), None
         except Exception as e:
-            return None
-    return None
+            return None, str(e)
+    return None, "YOLO_VAR is False"
 
 st.set_page_config(
     page_title="SPARK 2026 - Mersin Önleyici Bakım",
@@ -106,13 +107,7 @@ st.markdown("""
     .stTabs [data-baseweb="tab"] { font-weight: 600; }
     .stTabs [aria-selected="true"] { color: #a8880a !important; }
 
-    /* Multiselect etiketleri (chip) - sari zemin, koyu yazi */
-    span[data-baseweb="tag"] {
-        background-color: var(--enerjisa-sari) !important;
-        color: #1a1a1a !important;
-        border-radius: 6px !important;
-    }
-    span[data-baseweb="tag"] svg { fill: #1a1a1a !important; }
+    /* Multiselect chip renkleri st.html ile asagida inject ediliyor */
 
     /* =========================================
        KARANLIK MOD (DARK MODE) EZMELERİ
@@ -237,6 +232,45 @@ st.markdown("""
         h1 { font-size: 1.5rem !important; }
         h2 { font-size: 1.3rem !important; }
         h3 { font-size: 1.1rem !important; }
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Streamlit Emotion CSS'ini ezmek icin yuksek oncelikli stil
+st.markdown("""
+<style>
+    /* Multiselect chip (tag) renkleri - Enerjisa sari tema */
+    html body .stApp span[data-baseweb="tag"],
+    html body .stApp div[data-baseweb="tag"] {
+        background-color: #ffc600 !important;
+        color: #1a1a1a !important;
+        border-radius: 6px !important;
+        border-color: #e6b200 !important;
+    }
+    html body .stApp [data-baseweb="tag"] span {
+        color: #1a1a1a !important;
+    }
+    html body .stApp [data-baseweb="tag"] svg {
+        fill: #1a1a1a !important;
+    }
+    html body .stApp [data-baseweb="tag"]:hover {
+        background-color: #e6b200 !important;
+    }
+
+    /* Emotion class override - tum st-emotion-cache tag class'lari */
+    [class*="st-emotion-cache"][data-baseweb="tag"],
+    [class*="st-emotion-cache"] [data-baseweb="tag"] {
+        background-color: #ffc600 !important;
+        color: #1a1a1a !important;
+        border-color: #e6b200 !important;
+    }
+    [class*="st-emotion-cache"][data-baseweb="tag"] span,
+    [class*="st-emotion-cache"] [data-baseweb="tag"] span {
+        color: #1a1a1a !important;
+    }
+    [class*="st-emotion-cache"][data-baseweb="tag"] svg,
+    [class*="st-emotion-cache"] [data-baseweb="tag"] svg {
+        fill: #1a1a1a !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -488,9 +522,10 @@ def harita_paneli():
                         foto_bytes = st.session_state.canli_fotolar[olay_id]
                         
                         if YOLO_VAR:
-                            model = load_yolo_model()
+                            model, model_err = load_yolo_model()
                             if model is not None:
                                 try:
+                                    import io
                                     image = Image.open(io.BytesIO(foto_bytes))
                                     results = model(image)
                                     res = results[0]
@@ -511,9 +546,11 @@ def harita_paneli():
                                     st.error(f"Görüntü işlenemedi: {e}")
                                     st.image(io.BytesIO(foto_bytes), width=150)
                             else:
-                                st.warning("⚠️ YOLO modeli yüklenemedi. 'assets/best.pt' dosyasını kontrol edin.")
+                                st.warning(f"⚠️ YOLO modeli yüklenemedi: {model_err}")
                                 st.image(io.BytesIO(foto_bytes), width=150)
                         else:
+                            st.warning(f"⚠️ YOLO kütüphanesi yüklenemedi (ultralytics hatası): {YOLO_IMPORT_ERROR}")
+                            import io
                             st.image(io.BytesIO(foto_bytes), width=150)
         else:
             st.info("Seçili filtrelerle gösterilecek varlık yok.")
